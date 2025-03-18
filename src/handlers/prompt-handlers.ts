@@ -4,7 +4,7 @@ import { z } from 'zod';
 export function setupPromptHandlers(server: McpServer) {
   // Prompt for creating a new file
   server.prompt(
-    'create-file',
+    'webdav_create_file',
     {
       path: z.string().min(1, 'Path must not be empty'),
       content: z.string(),
@@ -30,7 +30,7 @@ Please execute this operation and confirm when complete.`
 
   // Prompt for reading a file
   server.prompt(
-    'read-file',
+    'webdav_read_file',
     {
       path: z.string().min(1, 'Path must not be empty')
     },
@@ -49,7 +49,7 @@ Please execute this operation and confirm when complete.`
 
   // Prompt for updating a file
   server.prompt(
-    'update-file',
+    'webdav_update_file',
     {
       path: z.string().min(1, 'Path must not be empty'),
       content: z.string(),
@@ -75,7 +75,7 @@ Please execute this update and confirm when complete.`
 
   // Prompt for deleting a file or directory
   server.prompt(
-    'delete',
+    'webdav_delete',
     // The issue is with boolean not being compatible with the prompt schema
     // Using string as a workaround
     {
@@ -106,7 +106,7 @@ Please confirm when the deletion is complete.`
 
   // Prompt for listing directory contents
   server.prompt(
-    'list-directory',
+    'webdav_list_directory',
     {
       path: z.string().optional()
     },
@@ -135,7 +135,7 @@ Please provide a well-formatted list showing:
 
   // Prompt for creating a directory
   server.prompt(
-    'create-directory',
+    'webdav_create_directory',
     {
       path: z.string().min(1, 'Path must not be empty')
     },
@@ -156,7 +156,7 @@ Please execute this operation and confirm when complete.`
 
   // Prompt for moving/renaming a file or directory
   server.prompt(
-    'move',
+    'webdav_move',
     {
       fromPath: z.string().min(1, 'Source path must not be empty'),
       toPath: z.string().min(1, 'Destination path must not be empty'),
@@ -179,7 +179,7 @@ Please execute this operation and confirm when complete.`
 
   // Prompt for copying a file or directory
   server.prompt(
-    'copy',
+    'webdav_copy',
     {
       fromPath: z.string().min(1, 'Source path must not be empty'),
       toPath: z.string().min(1, 'Destination path must not be empty')

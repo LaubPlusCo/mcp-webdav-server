@@ -4,7 +4,7 @@ import { WebDAVService } from '../services/webdav-service.js';
 export function setupResourceHandlers(server: McpServer, webdavService: WebDAVService) {
   // List files in a directory
   server.resource(
-    'list-directory',
+    'webdav_list_directory',
     new ResourceTemplate('webdav://{path}/list', {
       // The list property expects a proper response format
       list: async () => {
@@ -56,7 +56,7 @@ ${'-'.repeat(40)}`;
 
   // Get file content
   server.resource(
-    'get-file',
+    'webdav_get_file',
     new ResourceTemplate('webdav://{path}/content', {
       list: undefined,
     }),
@@ -89,7 +89,7 @@ ${'-'.repeat(40)}`;
 
   // Get file or directory info
   server.resource(
-    'get-info',
+    'webdav_get_info',
     new ResourceTemplate('webdav://{path}/info', {
       list: undefined,
     }),

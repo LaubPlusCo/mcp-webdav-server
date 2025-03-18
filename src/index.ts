@@ -13,7 +13,7 @@ async function main() {
     await startWebDAVServer({
       webdavConfig: {
         rootUrl: process.env.WEBDAV_ROOT_URL || 'http://localhost:4080',
-        rootPath: process.env.WEBDAV_ROOT_PATH || '/webdav',
+        rootPath: process.env.WEBDAV_ROOT_PATH || '/',
         username: process.env.WEBDAV_USERNAME || 'admin',
         password: process.env.WEBDAV_PASSWORD || 'password'
       },

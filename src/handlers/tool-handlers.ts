@@ -5,7 +5,8 @@ import { z } from 'zod';
 export function setupToolHandlers(server: McpServer, webdavService: WebDAVService) {
   // Create file tool
   server.tool(
-    'create-file',
+    'webdav_create_file',
+    'Create a new file using webdav with specified content at the given path',
     {
       path: z.string().min(1, 'Path must not be empty'),
       content: z.string(),
@@ -47,7 +48,8 @@ export function setupToolHandlers(server: McpServer, webdavService: WebDAVServic
 
   // Read file tool
   server.tool(
-    'read-file',
+    'webdav_read_file',
+    'Read the content of a file at the specified path using webdav',
     {
       path: z.string().min(1, 'Path must not be empty')
     },
@@ -75,7 +77,8 @@ export function setupToolHandlers(server: McpServer, webdavService: WebDAVServic
 
   // Update file tool
   server.tool(
-    'update-file',
+    'webdav_update_file',
+    'Update the content of an existing file at the specified path using webdav',
     {
       path: z.string().min(1, 'Path must not be empty'),
       content: z.string()
@@ -116,7 +119,8 @@ export function setupToolHandlers(server: McpServer, webdavService: WebDAVServic
 
   // Delete file or directory tool
   server.tool(
-    'delete',
+    'webdav_delete',
+    'Delete a file or directory at the specified path using webdav',
     {
       path: z.string().min(1, 'Path must not be empty')
     },
@@ -156,7 +160,8 @@ export function setupToolHandlers(server: McpServer, webdavService: WebDAVServic
 
   // Create directory tool
   server.tool(
-    'create-directory',
+    'webdav_create_directory',
+    'Create a new directory at the specified path using webdav',
     {
       path: z.string().min(1, 'Path must not be empty')
     },
@@ -184,7 +189,8 @@ export function setupToolHandlers(server: McpServer, webdavService: WebDAVServic
 
   // Move/rename file or directory tool
   server.tool(
-    'move',
+    'webdav_move',
+    'Move or rename a file or directory from one path to another using webdav',
     {
       fromPath: z.string().min(1, 'Source path must not be empty'),
       toPath: z.string().min(1, 'Destination path must not be empty'),
@@ -238,7 +244,8 @@ export function setupToolHandlers(server: McpServer, webdavService: WebDAVServic
 
   // Copy file or directory tool
   server.tool(
-    'copy',
+    'webdav_copy',
+    'Copy a file or directory from one path to another using webdav',
     {
       fromPath: z.string().min(1, 'Source path must not be empty'),
       toPath: z.string().min(1, 'Destination path must not be empty'),
@@ -292,7 +299,8 @@ export function setupToolHandlers(server: McpServer, webdavService: WebDAVServic
 
   // List directory tool
   server.tool(
-    'list-directory',
+    'webdav_list_directory',
+    'List files and directories at the specified path (defaults to root directory) using webdav',
     {
       path: z.string().optional().default('/')
     },
