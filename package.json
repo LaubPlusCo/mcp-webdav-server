@@ -1,6 +1,6 @@
 {
   "name": "webdav-mcp-server",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A Model Context Protocol server for WebDAV operations with basic authentication",
   "type": "module",
   "main": "dist/index.js",
