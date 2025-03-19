@@ -4,12 +4,15 @@ A Model Context Protocol (MCP) server that enables CRUD operations on a WebDAV e
 
 ## Features
 
-- Connect to any WebDAV server with basic authentication
+- Connect to any WebDAV server with optional authentication
 - Perform CRUD operations on files and directories
 - Expose file operations as MCP resources and tools
 - Run via stdio transport (for Claude Desktop integration) or HTTP/SSE transport
-- Secure access with basic authentication
-- Support for encrypted passwords using bcrypt
+- Secure access with optional basic authentication
+- Support for bcrypt-encrypted passwords for MCP server authentication (WebDAV passwords must be plain text due to protocol limitations)
+- Connection pooling for better performance with WebDAV servers
+- Configuration validation using Zod
+- Structured logging for better troubleshooting
 
 ## Prerequisites
 
@@ -49,12 +52,20 @@ npm run build
 # Build the Docker image
 docker build -t webdav-mcp-server .
 
-# Run the container
+# Run the container without authentication
 docker run -p 3000:3000 \
   -e WEBDAV_ROOT_URL=http://your-webdav-server \
   -e WEBDAV_ROOT_PATH=/webdav \
+  webdav-mcp-server
+  
+# Run the container with authentication for both WebDAV and MCP server
+docker run -p 3000:3000 \
+  -e WEBDAV_ROOT_URL=http://your-webdav-server \
+  -e WEBDAV_ROOT_PATH=/webdav \
+  -e WEBDAV_AUTH_ENABLED=true \
   -e WEBDAV_USERNAME=admin \
   -e WEBDAV_PASSWORD=password \
+  -e AUTH_ENABLED=true \
   -e AUTH_USERNAME=user \
   -e AUTH_PASSWORD=pass \
   webdav-mcp-server
@@ -68,25 +79,31 @@ Create a `.env` file in the root directory with the following variables:
 # WebDAV configuration
 WEBDAV_ROOT_URL=http://localhost:4080
 WEBDAV_ROOT_PATH=/webdav
+
+# WebDAV authentication (optional)
+WEBDAV_AUTH_ENABLED=true
 WEBDAV_USERNAME=admin
 
-# Password can be plain text
+# WebDAV password must be plain text (required when auth enabled)
+# The WebDAV protocol requires sending the actual password to the server
 WEBDAV_PASSWORD=password
-
-# Or a bcrypt hash with the {bcrypt} prefix
-# WEBDAV_PASSWORD={bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0oT8I/5jKJBy
 
 # Server configuration (for HTTP mode)
 SERVER_PORT=3000
 
-# Authentication configuration (for HTTP mode)
+# Authentication configuration for MCP server (optional)
+AUTH_ENABLED=true
 AUTH_USERNAME=user
 AUTH_PASSWORD=pass
+AUTH_REALM=MCP WebDAV Server
+
+# Auth password for MCP server can be a bcrypt hash (unlike WebDAV passwords)
+# AUTH_PASSWORD={bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0oT8I/5jKJBy
 ```
 
-### Encrypted Passwords
+### Encrypted Passwords for MCP Server Authentication
 
-For enhanced security, you can use bcrypt-encrypted passwords instead of storing them in plain text:
+For enhanced security of the MCP server (not WebDAV connections), you can use bcrypt-encrypted passwords instead of storing them in plain text:
 
 1. Generate a bcrypt hash:
    ```bash
@@ -99,14 +116,14 @@ For enhanced security, you can use bcrypt-encrypted passwords instead of storing
 
 2. Add the hash to your .env file with the {bcrypt} prefix:
    ```
-   WEBDAV_PASSWORD={bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0oT8I/5jKJBy
+   AUTH_PASSWORD={bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0oT8I/5jKJBy
    ```
 
-This way, your WebDAV password is never stored in plain text.
+This way, your MCP server password is stored securely. Note that WebDAV passwords must always be in plain text due to protocol requirements.
 
 ## Usage
 
-### Running with stdio transport (for Claude Desktop)
+### Running with stdio transport
 
 This mode is ideal for direct integration with Claude Desktop.
 
@@ -142,12 +159,54 @@ The easiest way to get started with both the WebDAV server and the MCP server is
 
 ```bash
 # Start both WebDAV and MCP servers
-docker-compose up
+cd docker
+docker-compose up -d
 
 # This will start:
-# - WebDAV server on port 4080 (username: admin, password: password)
+# - hacdias/webdav server on port 4080 (username: admin, password: admin)
 # - MCP server on port 3000 (username: user, password: pass)
 ```
+
+This setup uses [hacdias/webdav](https://github.com/hacdias/webdav), a simple and standalone WebDAV server written in Go. The configuration for the WebDAV server is stored in `webdav_config.yml`, which you can modify to adjust permissions, add users, or change other settings.
+
+The WebDAV server stores all files in a Docker volume called `webdav_data`, which persists across container restarts.
+
+## WebDAV Server Configuration
+
+The `webdav_config.yml` file configures the hacdias/webdav server used in the Docker Compose setup. Here's what you can customize:
+
+```yaml
+# Server address and port
+address: 0.0.0.0
+port: 6060
+
+# Root data directory
+directory: /data
+
+# Enable/disable CORS
+cors:
+  enabled: true
+  # Additional CORS settings...
+
+# Default permissions (C=Create, R=Read, U=Update, D=Delete)
+permissions: CRUD
+
+# User definitions
+users:
+  - username: admin
+    password: admin      # Plain text password
+    permissions: CRUD    # Full permissions
+  
+  - username: reader
+    password: reader
+    permissions: R       # Read-only permissions
+    
+  # You can also use bcrypt-encrypted passwords
+  - username: secure
+    password: "{bcrypt}$2y$10$zEP6oofmXFeHaeMfBNLnP.DO8m.H.Mwhd24/TOX2MWLxAExXi4qgi"
+```
+
+For more advanced configuration options, refer to the [hacdias/webdav documentation](https://github.com/hacdias/webdav).
 
 ## Testing
 
@@ -160,21 +219,56 @@ npm test
 ## Integrating with Claude Desktop
 
 1. Ensure the MCP feature is enabled in Claude Desktop
-2. Open Claude Desktop settings
-3. Navigate to MCP servers section
-4. Add a new server:
-   - If using stdio transport:
-     - Type: Command
-     - Command: `npx webdav-mcp-server`
-     - (or path to the executable if installed globally or built from source)
-   - If using HTTP/SSE transport:
-     - Type: HTTP
-     - URL: `http://localhost:3000/sse`
-     - Authentication: Basic
-     - Username: (value of AUTH_USERNAME)
-     - Password: (value of AUTH_PASSWORD)
-5. Save and enable the server
-6. You can now interact with your WebDAV files through Claude
+
+<details>
+<summary>Using npx</summary>
+2. Open Claude Desktop settings and click edit config (`claude_desktop_config.json`)
+3. Add
+```json
+{
+    "mcpServers": {
+        "webdav": {
+            "command": "npx",
+            "args": [
+                "webdav-mcp-server"
+            ],
+            "env": {
+                "WEBDAV_ROOT_URL": "<WEBDAV_ROOT_URL>",
+                "WEBDAV_ROOT_PATH": "<WEBDAV_ROOT_PATH>",
+                "WEBDAV_USERNAME": "<WEBDAV_USERNAME>",
+                "WEBDAV_PASSWORD": "<WEBDAV_PASSWORD>",
+                "WEBDAV_AUTH_ENABLED": true|false
+            }
+        }
+    }
+}
+```
+</details>
+<details>
+<summary>Using node and local build</summary>
+2. Clone this repository and run `setup.sh` on mac/linux or `setup.bat` on windows
+3. Open Claude Desktop settings and click edit config (`claude_desktop_config.json`)
+4. Add
+```json
+{
+    "mcpServers": {
+        "webdav": {
+            "command": "node",
+            "args": [
+                "<path to repository>/dist/index.js"
+            ],
+            "env": {
+                "WEBDAV_ROOT_URL": "<WEBDAV_ROOT_URL>",
+                "WEBDAV_ROOT_PATH": "<WEBDAV_ROOT_PATH>",
+                "WEBDAV_USERNAME": "<WEBDAV_USERNAME>",
+                "WEBDAV_PASSWORD": "<WEBDAV_PASSWORD>",
+                "WEBDAV_AUTH_ENABLED": true|false
+            }
+        }
+    }
+}
+```
+</details>
 
 ## Available MCP Resources
 
@@ -184,38 +278,38 @@ npm test
 
 ## Available MCP Tools
 
-- `create-file` - Create a new file
-- `read-file` - Read file content
-- `update-file` - Update existing file
-- `delete` - Delete file or directory
-- `create-directory` - Create a new directory
-- `move` - Move or rename file/directory
-- `copy` - Copy file/directory
-- `list-directory` - List directory contents
+- `webdav_create_remote_file` - Create a new file on a remote WebDAV server
+- `webdav_get_remote_file` - Retrieve content from a file stored on a remote WebDAV server
+- `webdav_update_remote_file` - Update an existing file on a remote WebDAV server
+- `webdav_delete_remote_item` - Delete a file or directory from a remote WebDAV server
+- `webdav_create_remote_directory` - Create a new directory on a remote WebDAV server
+- `webdav_move_remote_item` - Move or rename a file/directory on a remote WebDAV server
+- `webdav_copy_remote_item` - Copy a file/directory to a new location on a remote WebDAV server
+- `webdav_list_remote_directory` - List files and directories on a remote WebDAV server
 
 ## Available MCP Prompts
 
-- `create-file` - Prompt to create a new file
-- `read-file` - Prompt to read a file
-- `update-file` - Prompt to update a file
-- `delete` - Prompt to delete a file/directory
-- `list-directory` - Prompt to list directory contents
-- `create-directory` - Prompt to create a directory
-- `move` - Prompt to move/rename a file/directory
-- `copy` - Prompt to copy a file/directory
+- `webdav_create_remote_file` - Prompt to create a new file on a remote WebDAV server
+- `webdav_get_remote_file` - Prompt to retrieve content from a remote WebDAV file
+- `webdav_update_remote_file` - Prompt to update a file on a remote WebDAV server
+- `webdav_delete_remote_item` - Prompt to delete a file/directory from a remote WebDAV server
+- `webdav_list_remote_directory` - Prompt to list directory contents on a remote WebDAV server
+- `webdav_create_remote_directory` - Prompt to create a directory on a remote WebDAV server
+- `webdav_move_remote_item` - Prompt to move/rename a file/directory on a remote WebDAV server
+- `webdav_copy_remote_item` - Prompt to copy a file/directory on a remote WebDAV server
 
 ## Example Queries in Claude
 
 Here are some example queries you can use in Claude Desktop once the WebDAV MCP server is connected:
 
-- "List files in my WebDAV root directory"
-- "Create a new text file called notes.txt with the following content: Hello World"
-- "Read the file called document.txt from my WebDAV server"
-- "Update my config.json file with this new configuration"
-- "Create a directory called projects in my WebDAV"
-- "Copy my report.docx file to a backup location"
-- "Rename the file old_name.txt to new_name.txt"
-- "Delete the file temp.txt"
+- "List files on my remote WebDAV server"
+- "Create a new text file called notes.txt on my remote WebDAV server with the following content: Hello World"
+- "Get the content of document.txt from my remote WebDAV server"
+- "Update config.json on my remote WebDAV server with this new configuration"
+- "Create a directory called projects on my remote WebDAV server"
+- "Copy report.docx to a backup location on my remote WebDAV server"
+- "Move the file old_name.txt to new_name.txt on my remote WebDAV server"
+- "Delete temp.txt from my remote WebDAV server"
 
 ## Programmatic Usage
 
@@ -224,41 +318,82 @@ You can also use this package programmatically in your own projects:
 ```javascript
 import { startWebDAVServer } from 'webdav-mcp-server';
 
-// For stdio transport with plain password
+// For stdio transport without authentication
 await startWebDAVServer({
   webdavConfig: {
     rootUrl: 'http://your-webdav-server',
     rootPath: '/webdav',
+    authEnabled: false
+  },
+  useHttp: false
+});
+
+// For stdio transport with WebDAV authentication (password must be plain text)
+await startWebDAVServer({
+  webdavConfig: {
+    rootUrl: 'http://your-webdav-server',
+    rootPath: '/webdav',
+    authEnabled: true,
     username: 'admin',
     password: 'password'
   },
   useHttp: false
 });
 
-// With bcrypt hash
+// With bcrypt hash for MCP server password (HTTP auth only)
 await startWebDAVServer({
   webdavConfig: {
     rootUrl: 'http://your-webdav-server',
     rootPath: '/webdav',
+    authEnabled: true,
     username: 'admin',
-    password: '{bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0oT8I/5jKJBy'
+    password: 'password' // WebDAV password must be plain text
   },
-  useHttp: false
+  useHttp: true,
+  httpConfig: {
+    port: 3000,
+    auth: {
+      enabled: true,
+      username: 'user',
+      password: '{bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0oT8I/5jKJBy'
+    }
+  }
 });
 
-// For HTTP transport
+// For HTTP transport with MCP authentication
 await startWebDAVServer({
   webdavConfig: {
     rootUrl: 'http://your-webdav-server',
     rootPath: '/webdav',
+    authEnabled: true,
     username: 'admin',
     password: 'password'
   },
   useHttp: true,
   httpConfig: {
     port: 3000,
-    authUsername: 'user',
-    authPassword: 'pass'
+    auth: {
+      enabled: true,
+      username: 'user',
+      password: 'pass',
+      realm: 'MCP WebDAV Server'
+    }
+  }
+});
+
+// For HTTP transport without authentication
+await startWebDAVServer({
+  webdavConfig: {
+    rootUrl: 'http://your-webdav-server',
+    rootPath: '/webdav',
+    authEnabled: false
+  },
+  useHttp: true,
+  httpConfig: {
+    port: 3000,
+    auth: {
+      enabled: false
+    }
   }
 });
 ```
@@ -268,9 +403,15 @@ await startWebDAVServer({
 If you encounter any issues:
 
 1. Check the logs for detailed error messages
+   - Set `LOG_LEVEL=debug` in your .env file for more detailed logs
+   - Log files include timestamps, log levels, and structured data for better analysis
 2. Verify your WebDAV server is running and accessible
 3. Ensure your credentials are correct in the .env file
-4. Run the verification script: `verify-build.bat`
+4. Check connection pool status in the logs
+   - The server maintains a pool of WebDAV connections for better performance
+   - Connection issues will be clearly logged with detailed error information
+5. Validate your configuration
+   - The server uses Zod to validate configuration, so configuration errors will be clearly reported
 
 ## License
 

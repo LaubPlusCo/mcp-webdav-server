@@ -1,23 +1,44 @@
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { createAuthMiddleware } from '../middleware/auth-middleware.js';
+import { createAuthMiddleware, AuthOptions } from '../middleware/auth-middleware.js';
+import { createLogger } from '../utils/logger.js';
 
-export function setupExpressServer(server: McpServer, port: number): express.Application {
+export interface ExpressServerConfig {
+  port: number;
+  auth?: {
+    username?: string;
+    password?: string;
+    realm?: string;
+    enabled?: boolean;
+  };
+}
+
+export function setupExpressServer(server: McpServer, config: ExpressServerConfig): express.Application {
+  // Create logger using the server instance
+  const logger = createLogger('ExpressServer');
   const app = express();
   app.use(express.json());
 
   // Map to store connected clients
   const clients = new Map<string, SSEServerTransport>();
 
-  // Create auth middleware with environment variables
-  const authMiddleware = createAuthMiddleware({
-    username: process.env.AUTH_USERNAME || 'user',
-    password: process.env.AUTH_PASSWORD || 'pass'
-  });
+  // Create auth middleware based on configuration
+  const authOptions: AuthOptions = {
+    username: config.auth?.username || process.env.AUTH_USERNAME,
+    password: config.auth?.password || process.env.AUTH_PASSWORD,
+    realm: config.auth?.realm || process.env.AUTH_REALM || 'MCP WebDAV Server',
+    enabled: config.auth?.enabled ?? (process.env.AUTH_ENABLED === 'true')
+  };
 
-  // Apply auth middleware to all routes
-  app.use(authMiddleware);
+  // Only apply auth middleware if enabled
+  if (authOptions.enabled && authOptions.username && authOptions.password) {
+    const authMiddleware = createAuthMiddleware(authOptions);
+    app.use(authMiddleware);
+    logger.info('Authentication middleware enabled');
+  } else {
+    logger.info('Authentication middleware disabled');
+  }
 
   // SSE endpoint for client connection
   app.get('/sse', async (req, res) => {
@@ -32,13 +53,13 @@ export function setupExpressServer(server: McpServer, port: number): express.App
     
     // Connect the server to this transport
     server.connect(transport).catch(error => {
-      console.error(`Error connecting server to transport:`, error);
+      logger.error(`Error connecting server to transport:`, error);
     });
     
     // Handle client disconnect
     req.on('close', () => {
       clients.delete(transport.sessionId);
-      console.log(`Client ${transport.sessionId} disconnected`);
+      logger.info(`Client ${transport.sessionId} disconnected`);
     });
   });
 
@@ -56,7 +77,7 @@ export function setupExpressServer(server: McpServer, port: number): express.App
     try {
       await transport.handlePostMessage(req, res);
     } catch (error) {
-      console.error(`Error handling message for session ${sessionId}:`, error);
+      logger.error(`Error handling message for session ${sessionId}:`, error);
       // Note: handlePostMessage already sends appropriate response
     }
   });
@@ -73,8 +94,8 @@ export function setupExpressServer(server: McpServer, port: number): express.App
   });
 
   // Start the server
-  app.listen(port, () => {
-    console.log(`HTTP server with SSE transport listening on port ${port}`);
+  app.listen(config.port, () => {
+    logger.info(`HTTP server with SSE transport listening on port ${config.port}`);
   });
 
   return app;

@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # WebDAV server using hacdias/webdav
+  webdav:
+    image: hacdias/webdav:latest
+    ports:
+      - "4080:6060"
+    volumes:
+      - webdav_data:/data
+      - ./webdav_config.yml:/config.yml:ro
+    command: -c /config.yml
+    restart: unless-stopped
+
+  # MCP server for WebDAV operations
+  mcp-server:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - WEBDAV_ROOT_URL=http://webdav:6060
+      - WEBDAV_ROOT_PATH=/
+      - WEBDAV_AUTH_ENABLED=true
+      - WEBDAV_USERNAME=admin
+      - WEBDAV_PASSWORD=admin
+      - SERVER_PORT=3000
+      - AUTH_ENABLED=true
+      - AUTH_USERNAME=user
+      - AUTH_PASSWORD=pass
+    depends_on:
+      - webdav
+    restart: unless-stopped
+
+volumes:
+  webdav_data:

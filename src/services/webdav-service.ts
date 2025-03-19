@@ -1,5 +1,8 @@
-import { createClient, WebDAVClient, AuthType } from 'webdav';
-import { processPassword } from '../utils/password-utils.js';
+import { WebDAVClient } from 'webdav';
+import { webdavConnectionPool } from './webdav-connection-pool.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('WebDAVService');
 
 // Define our own FileStat interface to match what we use in the application
 export interface FileStat {
@@ -22,8 +25,9 @@ interface ResponseData {
 export interface WebDAVConfig {
   rootUrl: string;
   rootPath: string;
-  username: string;
-  password: string;
+  username?: string;
+  password?: string;
+  authEnabled?: boolean;
 }
 
 export class WebDAVService {
@@ -31,17 +35,28 @@ export class WebDAVService {
   private rootPath: string;
 
   constructor(config: WebDAVConfig) {
-    // Process the password to handle bcrypt format
-    const processedPassword = processPassword(config.password);
+    logger.debug('Initializing WebDAV service', { rootUrl: config.rootUrl, rootPath: config.rootPath });
     
-    // In v5.x, the client options structure has changed
-    this.client = createClient(config.rootUrl, {
-      authType: AuthType.Password,
+    // Determine if auth is enabled
+    const authEnabled = Boolean(config.authEnabled) || Boolean(config.username && config.password);
+    
+    // Get connection options
+    const connectionOptions: any = {
+      rootUrl: config.rootUrl,
+      authEnabled,
       username: config.username,
-      password: processedPassword
-    });
+      password: config.password
+    };
     
+    // Get connection from pool
+    this.client = webdavConnectionPool.getConnection(connectionOptions);
     this.rootPath = config.rootPath;
+    
+    logger.info('WebDAV service initialized', { 
+      rootUrl: config.rootUrl,
+      rootPath: config.rootPath,
+      authEnabled: authEnabled 
+    });
   }
 
   /**
@@ -49,18 +64,23 @@ export class WebDAVService {
    */
   async list(path: string = '/'): Promise<FileStat[]> {
     const fullPath = this.getFullPath(path);
+    logger.debug(`Listing directory: ${fullPath}`);
+    
     try {
       // In v5.x we need to handle the response differently
       const result = await this.client.getDirectoryContents(fullPath);
       
       // Convert the result to our FileStat interface
-      return Array.isArray(result) 
+      const fileStats = Array.isArray(result) 
         ? result.map(item => this.convertToFileStat(item))
         : this.isResponseData(result) && Array.isArray(result.data)
           ? result.data.map(item => this.convertToFileStat(item))
           : [];
+          
+      logger.debug(`Listed ${fileStats.length} items in directory: ${fullPath}`);
+      return fileStats;
     } catch (error) {
-      console.error(`Error listing directory ${fullPath}:`, error);
+      logger.error(`Error listing directory ${fullPath}:`, error);
       throw new Error(`Failed to list directory: ${(error as Error).message}`);
     }
   }
@@ -70,15 +90,20 @@ export class WebDAVService {
    */
   async stat(path: string): Promise<FileStat> {
     const fullPath = this.getFullPath(path);
+    logger.debug(`Getting stats for: ${fullPath}`);
+    
     try {
       const result = await this.client.stat(fullPath);
       
       // Convert the result to our FileStat interface
-      return this.convertToFileStat(
+      const stats = this.convertToFileStat(
         this.isResponseData(result) ? result.data : result
       );
+      
+      logger.debug(`Got stats for: ${fullPath}`, { type: stats.type });
+      return stats;
     } catch (error) {
-      console.error(`Error getting stats for ${fullPath}:`, error);
+      logger.error(`Error getting stats for ${fullPath}:`, error);
       throw new Error(`Failed to get file stats: ${(error as Error).message}`);
     }
   }
@@ -88,20 +113,27 @@ export class WebDAVService {
    */
   async readFile(path: string): Promise<string> {
     const fullPath = this.getFullPath(path);
+    logger.debug(`Reading file: ${fullPath}`);
+    
     try {
       // v5.x returns buffer by default, need to use format: 'text'
       const content = await this.client.getFileContents(fullPath, { format: 'text' });
       
       // Handle both direct string response and detailed response
+      let result: string;
       if (typeof content === 'string') {
-        return content;
+        result = content;
       } else if (this.isResponseData(content)) {
-        return String(content.data);
+        result = String(content.data);
+      } else {
+        throw new Error("Unexpected response format from server");
       }
       
-      throw new Error("Unexpected response format from server");
+      const contentLength = result.length;
+      logger.debug(`Read file: ${fullPath}`, { contentLength });
+      return result;
     } catch (error) {
-      console.error(`Error reading file ${fullPath}:`, error);
+      logger.error(`Error reading file ${fullPath}:`, error);
       throw new Error(`Failed to read file: ${(error as Error).message}`);
     }
   }
@@ -111,6 +143,9 @@ export class WebDAVService {
    */
   async writeFile(path: string, content: string | Buffer): Promise<void> {
     const fullPath = this.getFullPath(path);
+    const contentLength = typeof content === 'string' ? content.length : content.length;
+    logger.debug(`Writing file: ${fullPath}`, { contentLength });
+    
     try {
       // putFileContents in v5.x returns a boolean indicating success
       const result = await this.client.putFileContents(fullPath, content);
@@ -124,8 +159,10 @@ export class WebDAVService {
                  result.status !== 204) {
         throw new Error(`Failed to write file: server returned status ${result.status}`);
       }
+      
+      logger.debug(`Successfully wrote file: ${fullPath}`);
     } catch (error) {
-      console.error(`Error writing to file ${fullPath}:`, error);
+      logger.error(`Error writing to file ${fullPath}:`, error);
       throw new Error(`Failed to write file: ${(error as Error).message}`);
     }
   }
@@ -135,6 +172,8 @@ export class WebDAVService {
    */
   async createDirectory(path: string): Promise<void> {
     const fullPath = this.getFullPath(path);
+    logger.debug(`Creating directory: ${fullPath}`);
+    
     try {
       // createDirectory in v5.x returns a boolean indicating success
       const result = await this.client.createDirectory(fullPath);
@@ -148,8 +187,10 @@ export class WebDAVService {
                  result.status !== 204) {
         throw new Error(`Failed to create directory: server returned status ${result.status}`);
       }
+      
+      logger.debug(`Successfully created directory: ${fullPath}`);
     } catch (error) {
-      console.error(`Error creating directory ${fullPath}:`, error);
+      logger.error(`Error creating directory ${fullPath}:`, error);
       throw new Error(`Failed to create directory: ${(error as Error).message}`);
     }
   }
@@ -159,7 +200,13 @@ export class WebDAVService {
    */
   async delete(path: string): Promise<void> {
     const fullPath = this.getFullPath(path);
+    logger.debug(`Deleting: ${fullPath}`);
+    
     try {
+      // Get type before deleting for better logging
+      const stat = await this.stat(fullPath).catch(() => null);
+      const itemType = stat?.type || 'item';
+      
       // deleteFile in v5.x returns a boolean indicating success
       const result = await this.client.deleteFile(fullPath);
       
@@ -171,8 +218,10 @@ export class WebDAVService {
                  result.status !== 204) {
         throw new Error(`Failed to delete: server returned status ${result.status}`);
       }
+      
+      logger.debug(`Successfully deleted ${itemType}: ${fullPath}`);
     } catch (error) {
-      console.error(`Error deleting ${fullPath}:`, error);
+      logger.error(`Error deleting ${fullPath}:`, error);
       throw new Error(`Failed to delete: ${(error as Error).message}`);
     }
   }
@@ -183,7 +232,13 @@ export class WebDAVService {
   async move(fromPath: string, toPath: string): Promise<void> {
     const fullFromPath = this.getFullPath(fromPath);
     const fullToPath = this.getFullPath(toPath);
+    logger.debug(`Moving from ${fullFromPath} to ${fullToPath}`);
+    
     try {
+      // Get type before moving for better logging
+      const stat = await this.stat(fromPath).catch(() => null);
+      const itemType = stat?.type || 'item';
+      
       // moveFile in v5.x returns a boolean indicating success
       const result = await this.client.moveFile(fullFromPath, fullToPath);
       
@@ -196,8 +251,10 @@ export class WebDAVService {
                  result.status !== 204) {
         throw new Error(`Failed to move: server returned status ${result.status}`);
       }
+      
+      logger.debug(`Successfully moved ${itemType} from ${fullFromPath} to ${fullToPath}`);
     } catch (error) {
-      console.error(`Error moving from ${fullFromPath} to ${fullToPath}:`, error);
+      logger.error(`Error moving from ${fullFromPath} to ${fullToPath}:`, error);
       throw new Error(`Failed to move: ${(error as Error).message}`);
     }
   }
@@ -208,7 +265,13 @@ export class WebDAVService {
   async copy(fromPath: string, toPath: string): Promise<void> {
     const fullFromPath = this.getFullPath(fromPath);
     const fullToPath = this.getFullPath(toPath);
+    logger.debug(`Copying from ${fullFromPath} to ${fullToPath}`);
+    
     try {
+      // Get type before copying for better logging
+      const stat = await this.stat(fromPath).catch(() => null);
+      const itemType = stat?.type || 'item';
+      
       // copyFile in v5.x returns a boolean indicating success
       const result = await this.client.copyFile(fullFromPath, fullToPath);
       
@@ -221,8 +284,10 @@ export class WebDAVService {
                  result.status !== 204) {
         throw new Error(`Failed to copy: server returned status ${result.status}`);
       }
+      
+      logger.debug(`Successfully copied ${itemType} from ${fullFromPath} to ${fullToPath}`);
     } catch (error) {
-      console.error(`Error copying from ${fullFromPath} to ${fullToPath}:`, error);
+      logger.error(`Error copying from ${fullFromPath} to ${fullToPath}:`, error);
       throw new Error(`Failed to copy: ${(error as Error).message}`);
     }
   }
@@ -232,27 +297,28 @@ export class WebDAVService {
    */
   async exists(path: string): Promise<boolean> {
     const fullPath = this.getFullPath(path);
+    logger.debug(`Checking if exists: ${fullPath}`);
+    
     try {
       const result = await this.client.exists(fullPath);
       
       // Handle both boolean and object responses
-      if (typeof result === 'boolean') {
-        return result;
-      }
+      let exists = false;
       
-      // Check if result is an object with a status property
-      if (result && typeof result === 'object') {
+      if (typeof result === 'boolean') {
+        exists = result;
+      } else if (result && typeof result === 'object') {
         // Use type guard for better type safety
         const responseData = result as ResponseData;
         if (responseData.status !== undefined) {
-          return responseData.status < 400; // If status is less than 400, the resource exists
+          exists = responseData.status < 400; // If status is less than 400, the resource exists
         }
       }
       
-      // Default return if the result type is unexpected
-      return false;
+      logger.debug(`Exists check for ${fullPath}: ${exists}`);
+      return exists;
     } catch (error) {
-      console.error(`Error checking existence of ${fullPath}:`, error);
+      logger.error(`Error checking existence of ${fullPath}:`, error);
       return false;
     }
   }

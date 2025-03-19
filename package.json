@@ -1,6 +1,6 @@
 {
   "name": "webdav-mcp-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A Model Context Protocol server for WebDAV operations with basic authentication",
   "type": "module",
   "main": "dist/index.js",
@@ -14,7 +14,6 @@
     "start": "node dist/index.js",
     "dev": "tsc-watch --onSuccess \"node dist/index.js\"",
     "lint": "eslint src --ext .ts",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "watch": "tsc --watch",
     "prepublishOnly": "npm run build",
     "version:patch": "npm version patch",
@@ -36,16 +35,16 @@
     "webdav-client"
   ],
   "author": {
-    "name": "WebDAV MCP Server Contributors"
+    "name": "WebDAV MCP Server Contributors // Anders Laub"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/webdav-mcp-server.git"
+    "url": "https://github.com/LaubPlusCo/mpc-webdav-server"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/webdav-mcp-server/issues"
+    "url": "https://github.com/LaubPlusCo/mpc-webdav-server/issues"
   },
-  "homepage": "https://github.com/yourusername/webdav-mcp-server#readme",
+  "homepage": "https://github.com/LaubPlusCo/mpc-webdav-server/#readme",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
@@ -65,8 +64,6 @@
     "@typescript-eslint/eslint-plugin": "^7.2.0",
     "@typescript-eslint/parser": "^7.2.0",
     "eslint": "^8.57.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.2",
     "typescript": "^5.4.2",
     "tsc-watch": "^6.0.4"
   },
