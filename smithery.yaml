@@ -1,0 +1,68 @@
+# Smithery configuration file: https://smithery.ai/docs/build/project-config
+
+startCommand:
+  type: stdio
+  commandFunction:
+    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
+    |-
+    (config) => ({ command: 'node', args: ['dist/index.js', ...(config.useHttp? ['--http'] : [])], env: { WEBDAV_ROOT_URL: config.webdavConfig.rootUrl, WEBDAV_ROOT_PATH: config.webdavConfig.rootPath, WEBDAV_AUTH_ENABLED: String(config.webdavConfig.authEnabled), ...(config.webdavConfig.authEnabled? { WEBDAV_USERNAME: config.webdavConfig.username, WEBDAV_PASSWORD: config.webdavConfig.password } : {}), ...(config.useHttp? { AUTH_ENABLED: String(config.httpConfig.auth.enabled), ...(config.httpConfig.auth.enabled? { AUTH_USERNAME: config.httpConfig.auth.username, AUTH_PASSWORD: config.httpConfig.auth.password, ...(config.httpConfig.auth.realm? { AUTH_REALM: config.httpConfig.auth.realm } : {}) } : {}) } : {}) } })
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required:
+      - webdavConfig
+    properties:
+      webdavConfig:
+        type: object
+        required:
+          - rootUrl
+          - rootPath
+        properties:
+          rootUrl:
+            type: string
+            description: Base URL of the WebDAV server
+          rootPath:
+            type: string
+            description: Root path on the WebDAV server
+          authEnabled:
+            type: boolean
+            default: false
+            description: Enable WebDAV authentication
+          username:
+            type: string
+            description: Username for WebDAV authentication
+          password:
+            type: string
+            description: Password for WebDAV authentication (plain text)
+      useHttp:
+        type: boolean
+        default: false
+        description: Serve MCP over HTTP/SSE instead of stdio
+      httpConfig:
+        type: object
+        properties:
+          auth:
+            type: object
+            required:
+              - enabled
+            properties:
+              enabled:
+                type: boolean
+                description: Enable HTTP basic auth on the MCP server
+              username:
+                type: string
+                description: Username for MCP HTTP auth
+              password:
+                type: string
+                description: Password for MCP HTTP auth (plain or bcrypt hash)
+              realm:
+                type: string
+                description: Authentication realm
+  exampleConfig:
+    webdavConfig:
+      rootUrl: http://your-webdav-server
+      rootPath: /webdav
+      authEnabled: true
+      username: admin
+      password: password
+    useHttp: false

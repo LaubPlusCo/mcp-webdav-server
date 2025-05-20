@@ -1,5 +1,7 @@
 # WebDAV MCP Server
 
+[![smithery badge](https://smithery.ai/badge/@LaubPlusCo/mcp-webdav-server)](https://smithery.ai/server/@LaubPlusCo/mcp-webdav-server)
+
 A Model Context Protocol (MCP) server that enables CRUD operations on a WebDAV endpoint with basic authentication. This server enables Claude Desktop and other MCP clients to interact with WebDAV file systems through natural language commands.
 
 ## Features
@@ -21,6 +23,14 @@ A Model Context Protocol (MCP) server that enables CRUD operations on a WebDAV e
 - WebDAV server (for actual file operations)
 
 ## Installation
+
+### Installing via Smithery
+
+To install WebDAV Server Integration for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@LaubPlusCo/mcp-webdav-server):
+
+```bash
+npx -y @smithery/cli install @LaubPlusCo/mcp-webdav-server --client claude
+```
 
 ### Option 1: Install from npm package
 
@@ -116,7 +126,7 @@ For enhanced security of the MCP server (not WebDAV connections), you can use bc
 
 2. Add the hash to your .env file with the {bcrypt} prefix:
    ```
-   AUTH_PASSWORD={bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0oT8I/5jKJBy
+   AUTH_PASSWORD={bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0T8I/5jKJBy
    ```
 
 This way, your MCP server password is stored securely. Note that WebDAV passwords must always be in plain text due to protocol requirements.
@@ -356,7 +366,7 @@ await startWebDAVServer({
     auth: {
       enabled: true,
       username: 'user',
-      password: '{bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0oT8I/5jKJBy'
+      password: '{bcrypt}$2y$10$CyLKnUwn9fqqKQFEbxpZFuE9mzWR/x8t6TE7.CgAN0T8I/5jKJBy'
     }
   }
 });
