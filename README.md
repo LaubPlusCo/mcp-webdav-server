@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/laubplusco-mcp-webdav-server-badge.png)](https://mseep.ai/app/laubplusco-mcp-webdav-server)
+
 # WebDAV MCP Server
 
 A Model Context Protocol (MCP) server that enables CRUD operations on a WebDAV endpoint with basic authentication. This server enables Claude Desktop and other MCP clients to interact with WebDAV file systems through natural language commands.
