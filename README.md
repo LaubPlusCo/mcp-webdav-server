@@ -2,6 +2,10 @@
 
 A Model Context Protocol (MCP) server that enables CRUD operations on a WebDAV endpoint with basic authentication. This server enables Claude Desktop and other MCP clients to interact with WebDAV file systems through natural language commands.
 
+<a href="https://glama.ai/mcp/servers/@LaubPlusCo/mcp-webdav-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@LaubPlusCo/mcp-webdav-server/badge" alt="WebDAV Server MCP server" />
+</a>
+
 ## Features
 
 - Connect to any WebDAV server with optional authentication
