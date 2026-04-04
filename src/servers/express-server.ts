@@ -1,6 +1,8 @@
 import express from 'express';
+import { randomUUID } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { createAuthMiddleware, AuthOptions } from '../middleware/auth-middleware.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -15,15 +17,12 @@ export interface ExpressServerConfig {
 }
 
 export function setupExpressServer(server: McpServer, config: ExpressServerConfig): express.Application {
-  // Create logger using the server instance
   const logger = createLogger('ExpressServer');
   const app = express();
   app.use(express.json());
 
-  // Map to store connected clients
-  const clients = new Map<string, SSEServerTransport>();
+  const clients = new Map<string, StreamableHTTPServerTransport>();
 
-  // Create auth middleware based on configuration
   const authOptions: AuthOptions = {
     username: config.auth?.username || process.env.AUTH_USERNAME,
     password: config.auth?.password || process.env.AUTH_PASSWORD,
@@ -31,58 +30,65 @@ export function setupExpressServer(server: McpServer, config: ExpressServerConfi
     enabled: config.auth?.enabled ?? (process.env.AUTH_ENABLED === 'true')
   };
 
-  // Only apply auth middleware if enabled
   if (authOptions.enabled && authOptions.username && authOptions.password) {
-    const authMiddleware = createAuthMiddleware(authOptions);
-    app.use(authMiddleware);
+    app.use(createAuthMiddleware(authOptions));
     logger.info('Authentication middleware enabled');
   } else {
     logger.info('Authentication middleware disabled');
   }
 
-  // SSE endpoint for client connection
-  app.get('/sse', async (req, res) => {
-    // Create transport for this client
-    const transport = new SSEServerTransport('/messages', res);
-    
-    // Store the transport by its session ID
-    clients.set(transport.sessionId, transport);
-    
-    // Start the SSE connection
-    await transport.start();
-    
-    // Connect the server to this transport
-    server.connect(transport).catch(error => {
-      logger.error(`Error connecting server to transport:`, error);
-    });
-    
-    // Handle client disconnect
-    req.on('close', () => {
-      clients.delete(transport.sessionId);
-      logger.info(`Client ${transport.sessionId} disconnected`);
-    });
-  });
+  app.post('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-  // Message endpoint for client to server communication
-  app.post('/messages', async (req, res) => {
-    const sessionId = req.query.sessionId as string;
-    
-    if (!sessionId || !clients.has(sessionId)) {
-      res.status(400).json({ error: 'Invalid or missing session ID' });
+    if (sessionId && clients.has(sessionId)) {
+      await clients.get(sessionId)!.handleRequest(req, res, req.body);
       return;
     }
-    
-    const transport = clients.get(sessionId)!;
-    
-    try {
-      await transport.handlePostMessage(req, res);
-    } catch (error) {
-      logger.error(`Error handling message for session ${sessionId}:`, error);
-      // Note: handlePostMessage already sends appropriate response
+
+    if (!sessionId && isInitializeRequest(req.body)) {
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (id) => {
+          clients.set(id, transport);
+          logger.info(`Client ${id} connected`);
+        }
+      });
+
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          clients.delete(transport.sessionId);
+          logger.info(`Client ${transport.sessionId} disconnected`);
+        }
+      };
+
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+      return;
     }
+
+    res.status(400).json({ error: 'Invalid request: missing or unknown session ID' });
   });
 
-  // Health check endpoint
+  app.get('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    if (!sessionId || !clients.has(sessionId)) {
+      res.status(400).send('Invalid or missing session ID');
+      return;
+    }
+    await clients.get(sessionId)!.handleRequest(req, res);
+  });
+
+  app.delete('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    if (!sessionId || !clients.has(sessionId)) {
+      res.status(404).send('Session not found');
+      return;
+    }
+    const transport = clients.get(sessionId)!;
+    await transport.handleRequest(req, res);
+    clients.delete(sessionId);
+  });
+
   app.get('/health', (req, res) => {
     res.json({
       status: 'ok',
@@ -93,9 +99,8 @@ export function setupExpressServer(server: McpServer, config: ExpressServerConfi
     });
   });
 
-  // Start the server
   app.listen(config.port, () => {
-    logger.info(`HTTP server with SSE transport listening on port ${config.port}`);
+    logger.info(`HTTP server with StreamableHTTP transport listening on port ${config.port}`);
   });
 
   return app;
