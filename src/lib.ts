@@ -47,13 +47,6 @@ export async function startWebDAVServer(options: ServerOptions): Promise<void> {
     const server = new McpServer({
       name: 'WebDAV Server',
       version: '1.0.1',
-      description: 'MCP Server for WebDAV operations with configurable authentication',
-      capabilities: {
-        logging: {},     // Support for logging
-        prompts: {},     // Support for prompts
-        resources: {},   // Support for resources
-        tools: {}        // Support for tools
-      }
     });
     
     // Set the MCP server for all loggers to use
