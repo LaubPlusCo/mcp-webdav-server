@@ -1,4 +1,5 @@
 import { WebDAVClient } from 'webdav';
+import { posix } from 'node:path';
 import { webdavConnectionPool } from './webdav-connection-pool.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -336,19 +337,18 @@ export class WebDAVService {
    * Get the full path by combining root path with the provided path
    */
   private getFullPath(path: string): string {
-    // Make sure path starts with / but not with //
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-    
-    // Combine root path with the provided path
-    if (this.rootPath === '/') {
-      return normalizedPath;
+
+    const root = this.rootPath === '/' ? '/' :
+      this.rootPath.endsWith('/') ? this.rootPath.slice(0, -1) : this.rootPath;
+
+    const resolved = posix.normalize(`${root}${normalizedPath}`);
+
+    if (root !== '/' && !resolved.startsWith(root + '/') && resolved !== root) {
+      throw new Error(`Path traversal denied: ${path}`);
     }
-    
-    const rootWithoutTrailingSlash = this.rootPath.endsWith('/')
-      ? this.rootPath.slice(0, -1)
-      : this.rootPath;
-      
-    return `${rootWithoutTrailingSlash}${normalizedPath}`;
+
+    return resolved;
   }
 
   /**

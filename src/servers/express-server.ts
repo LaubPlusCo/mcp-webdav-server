@@ -21,7 +21,18 @@ export function setupExpressServer(server: McpServer, config: ExpressServerConfi
   const app = express();
   app.use(express.json());
 
-  const clients = new Map<string, StreamableHTTPServerTransport>();
+  const clients = new Map<string, { transport: StreamableHTTPServerTransport; createdAt: number }>();
+
+  const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+  setInterval(() => {
+    const now = Date.now();
+    for (const [id, session] of clients) {
+      if (now - session.createdAt > SESSION_TTL_MS) {
+        clients.delete(id);
+        logger.info(`Session ${id} expired after TTL`);
+      }
+    }
+  }, 5 * 60 * 1000).unref();
 
   const authOptions: AuthOptions = {
     username: config.auth?.username || process.env.AUTH_USERNAME,
@@ -41,7 +52,7 @@ export function setupExpressServer(server: McpServer, config: ExpressServerConfi
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
     if (sessionId && clients.has(sessionId)) {
-      await clients.get(sessionId)!.handleRequest(req, res, req.body);
+      await clients.get(sessionId)!.transport.handleRequest(req, res, req.body);
       return;
     }
 
@@ -49,7 +60,7 @@ export function setupExpressServer(server: McpServer, config: ExpressServerConfi
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {
-          clients.set(id, transport);
+          clients.set(id, { transport, createdAt: Date.now() });
           logger.info(`Client ${id} connected`);
         }
       });
@@ -75,7 +86,7 @@ export function setupExpressServer(server: McpServer, config: ExpressServerConfi
       res.status(400).send('Invalid or missing session ID');
       return;
     }
-    await clients.get(sessionId)!.handleRequest(req, res);
+    await clients.get(sessionId)!.transport.handleRequest(req, res);
   });
 
   app.delete('/mcp', async (req, res) => {
@@ -84,7 +95,7 @@ export function setupExpressServer(server: McpServer, config: ExpressServerConfi
       res.status(404).send('Session not found');
       return;
     }
-    const transport = clients.get(sessionId)!;
+    const { transport } = clients.get(sessionId)!;
     await transport.handleRequest(req, res);
     clients.delete(sessionId);
   });
