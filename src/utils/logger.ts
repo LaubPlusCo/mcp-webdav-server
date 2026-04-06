@@ -37,7 +37,7 @@ export class Logger {
     if (!this.server) return false;
 
     // Check if client has registered the logging capability
-    const capabilities = this.server.getClientCapabilities?.();
+    const capabilities = this.server.getClientCapabilities?.() as any;
     return capabilities?.logging !== undefined;
   }
 
